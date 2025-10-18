@@ -1,0 +1,5 @@
+{
+  "name": "TOAIGO Marketplace Reservation",
+  "description": "A simplified reservation system for a marketplace allowing users to discover merchants, book services, and manage their reservations.",
+  "requestFramePermissions": []
+}
