@@ -58,295 +58,7 @@ const NotificationToast: React.FC<{ notification: Notification, onClose: () => v
 };
 
 
-// --- Login Page Component ---
-interface LoginPageProps {
-    onLogin: (user: User) => void;
-}
-const LoginPage: React.FC<LoginPageProps> = ({ onLogin }) => {
-    const [users, setUsers] = useState<User[]>([]);
-    useEffect(() => {
-        api.getUsers().then(setUsers);
-    }, []);
-
-    return (
-        <div className="min-h-screen bg-gray-100 flex flex-col justify-center items-center p-4">
-            <div className="max-w-md w-full bg-white p-8 rounded-2xl shadow-lg">
-                <h1 className="text-3xl font-bold text-center text-indigo-600 mb-2">TOAIGO</h1>
-                <p className="text-center text-gray-600 mb-8">Marketplace Reservation System</p>
-                <div className="space-y-4">
-                    <h2 className="text-lg font-semibold text-gray-700">Select a user to log in as:</h2>
-                    {users.map(user => (
-                        <button key={user.id} onClick={() => onLogin(user)} className="w-full text-left p-4 rounded-lg bg-gray-50 hover:bg-indigo-100 transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-indigo-500">
-                            <p className="font-bold text-gray-800">{user.name}</p>
-                            <p className="text-sm text-indigo-700">{user.role}</p>
-                        </button>
-                    ))}
-                </div>
-            </div>
-        </div>
-    );
-};
-
-
-// --- USER VIEW (Original App) ---
-const UserView: React.FC<{ bookings: Booking[], setBookings: React.Dispatch<React.SetStateAction<Booking[]>>, merchants: Merchant[], addNotification: (message: string, type: Notification['type']) => void, onLogout: () => void }> = ({ bookings, setBookings, merchants, addNotification, onLogout }) => {
-  const [page, setPage] = useState<Page>('list');
-  const [selectedMerchantId, setSelectedMerchantId] = useState<string | null>(null);
-
-  const handleSelectMerchant = (id: string) => {
-    setSelectedMerchantId(id);
-    setPage('detail');
-  };
-
-  const handleBookingSubmit = async (details: Omit<Booking, 'id' | 'status' | 'createdAt' | 'merchant' | 'merchantId' | 'commission' | 'merchantPayout'>) => {
-    const merchant = merchants.find(m => m.id === selectedMerchantId);
-    if (!merchant) return;
-
-    const newBooking = await api.createBooking({ ...details, merchant, merchantId: merchant.id });
-    setBookings(prev => [newBooking, ...prev]);
-    addNotification('Booking request sent successfully!', 'success');
-    setPage('confirmation');
-  };
-  
-  const selectedMerchant = merchants.find(m => m.id === selectedMerchantId);
-
-  const renderContent = () => {
-    switch (page) {
-      case 'detail':
-        return selectedMerchant && <MerchantDetailPage merchant={selectedMerchant} onBook={() => setPage('booking')} onBack={() => setPage('list')} />;
-      case 'booking':
-        return selectedMerchant && <BookingPage merchant={selectedMerchant} onSubmit={handleBookingSubmit} onBack={() => setPage('detail')} />;
-      case 'confirmation':
-        return <ConfirmationPage onViewBookings={() => setPage('my-bookings')} onGoHome={() => setPage('list')} />;
-      case 'my-bookings':
-        return <MyBookingsPage bookings={bookings} />;
-      case 'list':
-      default:
-        return <MerchantListPage merchants={merchants} onSelectMerchant={handleSelectMerchant} />;
-    }
-  }
-
-  return (
-    <div>
-        <header className="bg-white shadow-md sticky top-0 z-10">
-            <nav className="container mx-auto px-4 sm:px-6 lg:px-8 py-4 flex justify-between items-center">
-                <a href="#" onClick={(e) => { e.preventDefault(); setPage('list'); }} className="text-2xl font-bold text-indigo-600">TOAIGO</a>
-                <div className="flex items-center gap-4">
-                    <button onClick={() => setPage('list')} className={`flex items-center gap-2 p-2 rounded-md transition-colors ${page === 'list' ? 'bg-indigo-100 text-indigo-700' : 'text-gray-600 hover:bg-gray-100'}`}>
-                        <HomeIcon className="w-5 h-5" />
-                        <span className="hidden sm:inline">Home</span>
-                    </button>
-                    <button onClick={() => setPage('my-bookings')} className={`flex items-center gap-2 p-2 rounded-md transition-colors ${page === 'my-bookings' ? 'bg-indigo-100 text-indigo-700' : 'text-gray-600 hover:bg-gray-100'}`}>
-                        <ListIcon className="w-5 h-5" />
-                        <span className="hidden sm:inline">My Bookings</span>
-                        {bookings.filter(b => b.status === BookingStatus.Pending).length > 0 && 
-                            <span className="bg-yellow-400 text-yellow-900 text-xs font-bold w-5 h-5 flex items-center justify-center rounded-full">
-                            {bookings.filter(b => b.status === BookingStatus.Pending).length}
-                            </span>}
-                    </button>
-                     <button onClick={onLogout} className="flex items-center gap-2 p-2 rounded-md text-gray-600 hover:bg-gray-100">
-                        <LogoutIcon className="w-5 h-5" />
-                        <span className="hidden sm:inline">Logout</span>
-                    </button>
-                </div>
-            </nav>
-        </header>
-        <main className="container mx-auto">
-            {renderContent()}
-        </main>
-    </div>
-  )
-};
-
-// --- MERCHANT DASHBOARD ---
-const MerchantDashboard: React.FC<{ user: User, allBookings: Booking[], merchants: Merchant[], setMerchants: React.Dispatch<React.SetStateAction<Merchant[]>>, onBookingStatusChange: (bookingId: string, newStatus: BookingStatus) => void, addNotification: (message: string, type: Notification['type']) => void }> = ({ user, allBookings, merchants, setMerchants, onBookingStatusChange, addNotification }) => {
-    const merchant = useMemo(() => merchants.find(m => m.id === user.merchantId), [merchants, user.merchantId]);
-    const merchantBookings = useMemo(() => allBookings.filter(b => b.merchantId === user.merchantId).sort((a,b) => b.createdAt.getTime() - a.createdAt.getTime()), [allBookings, user.merchantId]);
-    
-    const [activeTab, setActiveTab] = useState('bookings');
-    
-    const handleStatusChange = (bookingId: string, newStatus: BookingStatus) => {
-        onBookingStatusChange(bookingId, newStatus);
-        addNotification(`Booking has been ${newStatus.toLowerCase()}.`, 'info');
-    };
-
-    if (!merchant) return <div className="p-8 text-center text-red-500">Error: Merchant data could not be found.</div>
-
-    return (
-        <div className="p-4 sm:p-6 lg:p-8">
-            <h1 className="text-3xl font-bold text-gray-800 mb-2">Merchant Dashboard</h1>
-            <p className="text-gray-600 mb-6">Welcome, {user.name}. Here's what's happening at your business.</p>
-
-            <div className="border-b border-gray-200 mb-6">
-                <nav className="-mb-px flex space-x-8" aria-label="Tabs">
-                    <button onClick={() => setActiveTab('bookings')} className={`whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm ${activeTab === 'bookings' ? 'border-indigo-500 text-indigo-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}>
-                        Bookings
-                    </button>
-                     <button onClick={() => setActiveTab('services')} className={`whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm ${activeTab === 'services' ? 'border-indigo-500 text-indigo-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}>
-                        Services
-                    </button>
-                    <button onClick={() => setActiveTab('finances')} className={`whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm ${activeTab === 'finances' ? 'border-indigo-500 text-indigo-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}>
-                        Finances
-                    </button>
-                </nav>
-            </div>
-
-            {activeTab === 'bookings' && <BookingManagement merchantBookings={merchantBookings} onStatusChange={handleStatusChange} />}
-            {activeTab === 'services' && <ServiceManagement merchant={merchant} setMerchants={setMerchants} addNotification={addNotification} />}
-            {activeTab === 'finances' && <FinancialsDashboard merchantBookings={merchantBookings} />}
-        </div>
-    );
-};
-
-
-// --- ADMIN PANEL ---
-const AdminPanel: React.FC<{ merchants: Merchant[], allBookings: Booking[] }> = ({ merchants, allBookings }) => {
-    const [activeTab, setActiveTab] = useState('finances');
-    const sortedBookings = useMemo(() => allBookings.sort((a,b) => b.createdAt.getTime() - a.createdAt.getTime()), [allBookings]);
-
-    return (
-         <div className="p-4 sm:p-6 lg:p-8">
-            <h1 className="text-3xl font-bold text-gray-800 mb-6">TOAIGO Admin Panel</h1>
-            <div className="border-b border-gray-200 mb-6">
-                <nav className="-mb-px flex space-x-8" aria-label="Tabs">
-                    <button onClick={() => setActiveTab('finances')} className={`whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm ${activeTab === 'finances' ? 'border-indigo-500 text-indigo-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}>
-                        Finance Dashboard
-                    </button>
-                    <button onClick={() => setActiveTab('bookings')} className={`whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm ${activeTab === 'bookings' ? 'border-indigo-500 text-indigo-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}>
-                        Booking Monitoring
-                    </button>
-                     <button onClick={() => setActiveTab('merchants')} className={`whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm ${activeTab === 'merchants' ? 'border-indigo-500 text-indigo-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}>
-                        Merchant Management
-                    </button>
-                </nav>
-            </div>
-            {activeTab === 'finances' && <AdminFinanceDashboard allBookings={allBookings} />}
-            {activeTab === 'bookings' && (
-                <div className="bg-white rounded-lg shadow-md overflow-x-auto">
-                    <table className="w-full text-sm text-left text-gray-500">
-                        <thead className="text-xs text-gray-700 uppercase bg-gray-50">
-                            <tr>
-                                <th scope="col" className="px-6 py-3">Merchant</th>
-                                <th scope="col" className="px-6 py-3">Date & Time</th>
-                                <th scope="col" className="px-6 py-3">Service & Cost</th>
-                                <th scope="col" className="px-6 py-3">Status</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {sortedBookings.map(b => (
-                                <tr key={b.id} className="bg-white border-b hover:bg-gray-50">
-                                    <td className="px-6 py-4 font-medium text-gray-900">{b.merchant.name}</td>
-                                    <td className="px-6 py-4">{formatDate(b.date)} at {b.time}</td>
-                                    <td className="px-6 py-4">{b.serviceName} ({formatCurrency(b.bookingCost)})</td>
-                                    <td className="px-6 py-4"><span className={`px-2 py-1 text-xs font-medium rounded-full ${getStatusColor(b.status)}`}>{b.status}</span></td>
-                                </tr>
-                            ))}
-                        </tbody>
-                    </table>
-                     {sortedBookings.length === 0 && <p className="p-6 text-gray-500">No bookings in the system yet.</p>}
-                </div>
-            )}
-             {activeTab === 'merchants' && (
-                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                    {merchants.map(merchant => (
-                        <div key={merchant.id} className="bg-white p-5 rounded-lg shadow-md">
-                             <img src={merchant.imageUrl} alt={merchant.name} className="w-full h-40 object-cover rounded-md mb-4" />
-                            <h3 className="font-bold text-lg text-gray-800">{merchant.name}</h3>
-                            <p className="text-sm text-indigo-600">{merchant.category}</p>
-                            <div className="mt-4 flex gap-2">
-                                <button className="text-sm bg-gray-200 hover:bg-gray-300 text-gray-800 font-semibold py-1 px-3 rounded-md transition-colors">Edit</button>
-                                <button className="text-sm bg-red-100 hover:bg-red-200 text-red-800 font-semibold py-1 px-3 rounded-md transition-colors">Delete</button>
-                            </div>
-                        </div>
-                    ))}
-                 </div>
-            )}
-        </div>
-    );
-}
-
-
-// --- Main App Component (Router) ---
-const App: React.FC = () => {
-  const [currentUser, setCurrentUser] = useState<User | null>(null);
-  const [merchants, setMerchants] = useState<Merchant[]>([]);
-  const [bookings, setBookings] = useState<Booking[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [notifications, setNotifications] = useState<Notification[]>([]);
-
-  useEffect(() => {
-    const loadInitialData = async () => {
-      setLoading(true);
-      const [merchantData, bookingData] = await Promise.all([api.getMerchants(), api.getBookings()]);
-      // Create shallow copies to prevent state mutation issues from mock API
-      setMerchants([...merchantData]);
-      setBookings([...bookingData]);
-      setLoading(false);
-    };
-    loadInitialData();
-  }, []);
-  
-  const addNotification = useCallback((message: string, type: Notification['type']) => {
-    const newNotification = { id: Date.now(), message, type };
-    setNotifications(prev => [...prev, newNotification]);
-  }, []);
-
-  const removeNotification = (id: number) => {
-    setNotifications(prev => prev.filter(n => n.id !== id));
-  };
-
-  const handleLogin = (user: User) => setCurrentUser(user);
-  const handleLogout = () => setCurrentUser(null);
-  
-  const handleBookingStatusChange = async (bookingId: string, newStatus: BookingStatus) => {
-      const updatedBooking = await api.updateBookingStatus(bookingId, newStatus);
-      if (updatedBooking) {
-          setBookings(prev => prev.map(b => b.id === bookingId ? updatedBooking : b));
-      }
-  };
-
-  if (loading) return <LoadingSpinner />;
-  if (!currentUser) return <LoginPage onLogin={handleLogin} />;
-
-  const renderRoleView = () => {
-    switch (currentUser.role) {
-      case Role.Merchant:
-        return <MerchantDashboard user={currentUser} allBookings={bookings} onBookingStatusChange={handleBookingStatusChange} addNotification={addNotification} merchants={merchants} setMerchants={setMerchants} />;
-      case Role.Admin:
-        return <AdminPanel merchants={merchants} allBookings={bookings} />;
-      case Role.User:
-      default:
-        return <UserView bookings={bookings} setBookings={setBookings} merchants={merchants} addNotification={addNotification} onLogout={handleLogout}/>;
-    }
-  };
-
-  return (
-    <div className="min-h-screen bg-gray-50 font-sans text-gray-900">
-      {currentUser.role !== Role.User && (
-           <header className="bg-white shadow-sm sticky top-0 z-10">
-                <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-3 flex justify-between items-center">
-                    <p className="text-xl font-bold text-indigo-600">TOAIGO <span className="font-light text-gray-500 text-lg">{currentUser.role}</span></p>
-                    <div className="flex items-center gap-4">
-                        <span className="text-sm text-gray-600 hidden sm:inline">Logged in as <strong>{currentUser.name}</strong></span>
-                        <button onClick={handleLogout} className="flex items-center gap-2 p-2 rounded-md text-gray-500 hover:bg-gray-100 hover:text-gray-800 transition-colors">
-                            <LogoutIcon className="w-5 h-5" />
-                        </button>
-                    </div>
-                </div>
-            </header>
-      )}
-      {renderRoleView()}
-      <div className="fixed top-5 right-5 z-50 space-y-2 w-full max-w-sm">
-        {notifications.map(n => <NotificationToast key={n.id} notification={n} onClose={() => removeNotification(n.id)} />)}
-      </div>
-    </div>
-  );
-};
-
-export default App;
-
-
-// --- Component Definitions (to keep them in scope) ---
+// --- Component Definitions (Moved here to fix ReferenceError) ---
 
 const MerchantListPage: React.FC<{ merchants: Merchant[]; onSelectMerchant: (id: string) => void; }> = ({ merchants, onSelectMerchant }) => (
   <div className="p-4 sm:p-6 lg:p-8">
@@ -749,3 +461,291 @@ const AdminFinanceDashboard: React.FC<{ allBookings: Booking[] }> = ({ allBookin
         </div>
     );
 };
+
+
+// --- Login Page Component ---
+interface LoginPageProps {
+    onLogin: (user: User) => void;
+}
+const LoginPage: React.FC<LoginPageProps> = ({ onLogin }) => {
+    const [users, setUsers] = useState<User[]>([]);
+    useEffect(() => {
+        api.getUsers().then(setUsers);
+    }, []);
+
+    return (
+        <div className="min-h-screen bg-gray-100 flex flex-col justify-center items-center p-4">
+            <div className="max-w-md w-full bg-white p-8 rounded-2xl shadow-lg">
+                <h1 className="text-3xl font-bold text-center text-indigo-600 mb-2">TOAIGO</h1>
+                <p className="text-center text-gray-600 mb-8">Marketplace Reservation System</p>
+                <div className="space-y-4">
+                    <h2 className="text-lg font-semibold text-gray-700">Select a user to log in as:</h2>
+                    {users.map(user => (
+                        <button key={user.id} onClick={() => onLogin(user)} className="w-full text-left p-4 rounded-lg bg-gray-50 hover:bg-indigo-100 transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                            <p className="font-bold text-gray-800">{user.name}</p>
+                            <p className="text-sm text-indigo-700">{user.role}</p>
+                        </button>
+                    ))}
+                </div>
+            </div>
+        </div>
+    );
+};
+
+
+// --- USER VIEW (Original App) ---
+const UserView: React.FC<{ bookings: Booking[], setBookings: React.Dispatch<React.SetStateAction<Booking[]>>, merchants: Merchant[], addNotification: (message: string, type: Notification['type']) => void, onLogout: () => void }> = ({ bookings, setBookings, merchants, addNotification, onLogout }) => {
+  const [page, setPage] = useState<Page>('list');
+  const [selectedMerchantId, setSelectedMerchantId] = useState<string | null>(null);
+
+  const handleSelectMerchant = (id: string) => {
+    setSelectedMerchantId(id);
+    setPage('detail');
+  };
+
+  const handleBookingSubmit = async (details: Omit<Booking, 'id' | 'status' | 'createdAt' | 'merchant' | 'merchantId' | 'commission' | 'merchantPayout'>) => {
+    const merchant = merchants.find(m => m.id === selectedMerchantId);
+    if (!merchant) return;
+
+    const newBooking = await api.createBooking({ ...details, merchant, merchantId: merchant.id });
+    setBookings(prev => [newBooking, ...prev]);
+    addNotification('Booking request sent successfully!', 'success');
+    setPage('confirmation');
+  };
+  
+  const selectedMerchant = merchants.find(m => m.id === selectedMerchantId);
+
+  const renderContent = () => {
+    switch (page) {
+      case 'detail':
+        return selectedMerchant && <MerchantDetailPage merchant={selectedMerchant} onBook={() => setPage('booking')} onBack={() => setPage('list')} />;
+      case 'booking':
+        return selectedMerchant && <BookingPage merchant={selectedMerchant} onSubmit={handleBookingSubmit} onBack={() => setPage('detail')} />;
+      case 'confirmation':
+        return <ConfirmationPage onViewBookings={() => setPage('my-bookings')} onGoHome={() => setPage('list')} />;
+      case 'my-bookings':
+        return <MyBookingsPage bookings={bookings} />;
+      case 'list':
+      default:
+        return <MerchantListPage merchants={merchants} onSelectMerchant={handleSelectMerchant} />;
+    }
+  }
+
+  return (
+    <div>
+        <header className="bg-white shadow-md sticky top-0 z-10">
+            <nav className="container mx-auto px-4 sm:px-6 lg:px-8 py-4 flex justify-between items-center">
+                <a href="#" onClick={(e) => { e.preventDefault(); setPage('list'); }} className="text-2xl font-bold text-indigo-600">TOAIGO</a>
+                <div className="flex items-center gap-4">
+                    <button onClick={() => setPage('list')} className={`flex items-center gap-2 p-2 rounded-md transition-colors ${page === 'list' ? 'bg-indigo-100 text-indigo-700' : 'text-gray-600 hover:bg-gray-100'}`}>
+                        <HomeIcon className="w-5 h-5" />
+                        <span className="hidden sm:inline">Home</span>
+                    </button>
+                    <button onClick={() => setPage('my-bookings')} className={`flex items-center gap-2 p-2 rounded-md transition-colors ${page === 'my-bookings' ? 'bg-indigo-100 text-indigo-700' : 'text-gray-600 hover:bg-gray-100'}`}>
+                        <ListIcon className="w-5 h-5" />
+                        <span className="hidden sm:inline">My Bookings</span>
+                        {bookings.filter(b => b.status === BookingStatus.Pending).length > 0 && 
+                            <span className="bg-yellow-400 text-yellow-900 text-xs font-bold w-5 h-5 flex items-center justify-center rounded-full">
+                            {bookings.filter(b => b.status === BookingStatus.Pending).length}
+                            </span>}
+                    </button>
+                     <button onClick={onLogout} className="flex items-center gap-2 p-2 rounded-md text-gray-600 hover:bg-gray-100">
+                        <LogoutIcon className="w-5 h-5" />
+                        <span className="hidden sm:inline">Logout</span>
+                    </button>
+                </div>
+            </nav>
+        </header>
+        <main className="container mx-auto">
+            {renderContent()}
+        </main>
+    </div>
+  )
+};
+
+// --- MERCHANT DASHBOARD ---
+const MerchantDashboard: React.FC<{ user: User, allBookings: Booking[], merchants: Merchant[], setMerchants: React.Dispatch<React.SetStateAction<Merchant[]>>, onBookingStatusChange: (bookingId: string, newStatus: BookingStatus) => void, addNotification: (message: string, type: Notification['type']) => void }> = ({ user, allBookings, merchants, setMerchants, onBookingStatusChange, addNotification }) => {
+    const merchant = useMemo(() => merchants.find(m => m.id === user.merchantId), [merchants, user.merchantId]);
+    const merchantBookings = useMemo(() => allBookings.filter(b => b.merchantId === user.merchantId).sort((a,b) => b.createdAt.getTime() - a.createdAt.getTime()), [allBookings, user.merchantId]);
+    
+    const [activeTab, setActiveTab] = useState('bookings');
+    
+    const handleStatusChange = (bookingId: string, newStatus: BookingStatus) => {
+        onBookingStatusChange(bookingId, newStatus);
+        addNotification(`Booking has been ${newStatus.toLowerCase()}.`, 'info');
+    };
+
+    if (!merchant) return <div className="p-8 text-center text-red-500">Error: Merchant data could not be found.</div>
+
+    return (
+        <div className="p-4 sm:p-6 lg:p-8">
+            <h1 className="text-3xl font-bold text-gray-800 mb-2">Merchant Dashboard</h1>
+            <p className="text-gray-600 mb-6">Welcome, {user.name}. Here's what's happening at your business.</p>
+
+            <div className="border-b border-gray-200 mb-6">
+                <nav className="-mb-px flex space-x-8" aria-label="Tabs">
+                    <button onClick={() => setActiveTab('bookings')} className={`whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm ${activeTab === 'bookings' ? 'border-indigo-500 text-indigo-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}>
+                        Bookings
+                    </button>
+                     <button onClick={() => setActiveTab('services')} className={`whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm ${activeTab === 'services' ? 'border-indigo-500 text-indigo-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}>
+                        Services
+                    </button>
+                    <button onClick={() => setActiveTab('finances')} className={`whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm ${activeTab === 'finances' ? 'border-indigo-500 text-indigo-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}>
+                        Finances
+                    </button>
+                </nav>
+            </div>
+
+            {activeTab === 'bookings' && <BookingManagement merchantBookings={merchantBookings} onStatusChange={handleStatusChange} />}
+            {activeTab === 'services' && <ServiceManagement merchant={merchant} setMerchants={setMerchants} addNotification={addNotification} />}
+            {activeTab === 'finances' && <FinancialsDashboard merchantBookings={merchantBookings} />}
+        </div>
+    );
+};
+
+
+// --- ADMIN PANEL ---
+const AdminPanel: React.FC<{ merchants: Merchant[], allBookings: Booking[] }> = ({ merchants, allBookings }) => {
+    const [activeTab, setActiveTab] = useState('finances');
+    const sortedBookings = useMemo(() => allBookings.sort((a,b) => b.createdAt.getTime() - a.createdAt.getTime()), [allBookings]);
+
+    return (
+         <div className="p-4 sm:p-6 lg:p-8">
+            <h1 className="text-3xl font-bold text-gray-800 mb-6">TOAIGO Admin Panel</h1>
+            <div className="border-b border-gray-200 mb-6">
+                <nav className="-mb-px flex space-x-8" aria-label="Tabs">
+                    <button onClick={() => setActiveTab('finances')} className={`whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm ${activeTab === 'finances' ? 'border-indigo-500 text-indigo-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}>
+                        Finance Dashboard
+                    </button>
+                    <button onClick={() => setActiveTab('bookings')} className={`whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm ${activeTab === 'bookings' ? 'border-indigo-500 text-indigo-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}>
+                        Booking Monitoring
+                    </button>
+                     <button onClick={() => setActiveTab('merchants')} className={`whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm ${activeTab === 'merchants' ? 'border-indigo-500 text-indigo-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}>
+                        Merchant Management
+                    </button>
+                </nav>
+            </div>
+            {activeTab === 'finances' && <AdminFinanceDashboard allBookings={allBookings} />}
+            {activeTab === 'bookings' && (
+                <div className="bg-white rounded-lg shadow-md overflow-x-auto">
+                    <table className="w-full text-sm text-left text-gray-500">
+                        <thead className="text-xs text-gray-700 uppercase bg-gray-50">
+                            <tr>
+                                <th scope="col" className="px-6 py-3">Merchant</th>
+                                <th scope="col" className="px-6 py-3">Date & Time</th>
+                                <th scope="col" className="px-6 py-3">Service & Cost</th>
+                                <th scope="col" className="px-6 py-3">Status</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {sortedBookings.map(b => (
+                                <tr key={b.id} className="bg-white border-b hover:bg-gray-50">
+                                    <td className="px-6 py-4 font-medium text-gray-900">{b.merchant.name}</td>
+                                    <td className="px-6 py-4">{formatDate(b.date)} at {b.time}</td>
+                                    <td className="px-6 py-4">{b.serviceName} ({formatCurrency(b.bookingCost)})</td>
+                                    <td className="px-6 py-4"><span className={`px-2 py-1 text-xs font-medium rounded-full ${getStatusColor(b.status)}`}>{b.status}</span></td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                     {sortedBookings.length === 0 && <p className="p-6 text-gray-500">No bookings in the system yet.</p>}
+                </div>
+            )}
+             {activeTab === 'merchants' && (
+                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    {merchants.map(merchant => (
+                        <div key={merchant.id} className="bg-white p-5 rounded-lg shadow-md">
+                             <img src={merchant.imageUrl} alt={merchant.name} className="w-full h-40 object-cover rounded-md mb-4" />
+                            <h3 className="font-bold text-lg text-gray-800">{merchant.name}</h3>
+                            <p className="text-sm text-indigo-600">{merchant.category}</p>
+                            <div className="mt-4 flex gap-2">
+                                <button className="text-sm bg-gray-200 hover:bg-gray-300 text-gray-800 font-semibold py-1 px-3 rounded-md transition-colors">Edit</button>
+                                <button className="text-sm bg-red-100 hover:bg-red-200 text-red-800 font-semibold py-1 px-3 rounded-md transition-colors">Delete</button>
+                            </div>
+                        </div>
+                    ))}
+                 </div>
+            )}
+        </div>
+    );
+}
+
+
+// --- Main App Component (Router) ---
+const App: React.FC = () => {
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const [merchants, setMerchants] = useState<Merchant[]>([]);
+  const [bookings, setBookings] = useState<Booking[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [notifications, setNotifications] = useState<Notification[]>([]);
+
+  useEffect(() => {
+    const loadInitialData = async () => {
+      setLoading(true);
+      const [merchantData, bookingData] = await Promise.all([api.getMerchants(), api.getBookings()]);
+      // Create shallow copies to prevent state mutation issues from mock API
+      setMerchants([...merchantData]);
+      setBookings([...bookingData]);
+      setLoading(false);
+    };
+    loadInitialData();
+  }, []);
+  
+  const addNotification = useCallback((message: string, type: Notification['type']) => {
+    const newNotification = { id: Date.now(), message, type };
+    setNotifications(prev => [...prev, newNotification]);
+  }, []);
+
+  const removeNotification = (id: number) => {
+    setNotifications(prev => prev.filter(n => n.id !== id));
+  };
+
+  const handleLogin = (user: User) => setCurrentUser(user);
+  const handleLogout = () => setCurrentUser(null);
+  
+  const handleBookingStatusChange = async (bookingId: string, newStatus: BookingStatus) => {
+      const updatedBooking = await api.updateBookingStatus(bookingId, newStatus);
+      if (updatedBooking) {
+          setBookings(prev => prev.map(b => b.id === bookingId ? updatedBooking : b));
+      }
+  };
+
+  if (loading) return <LoadingSpinner />;
+  if (!currentUser) return <LoginPage onLogin={handleLogin} />;
+
+  const renderRoleView = () => {
+    switch (currentUser.role) {
+      case Role.Merchant:
+        return <MerchantDashboard user={currentUser} allBookings={bookings} onBookingStatusChange={handleBookingStatusChange} addNotification={addNotification} merchants={merchants} setMerchants={setMerchants} />;
+      case Role.Admin:
+        return <AdminPanel merchants={merchants} allBookings={bookings} />;
+      case Role.User:
+      default:
+        return <UserView bookings={bookings} setBookings={setBookings} merchants={merchants} addNotification={addNotification} onLogout={handleLogout}/>;
+    }
+  };
+
+  return (
+    <div className="min-h-screen bg-gray-50 font-sans text-gray-900">
+      {currentUser.role !== Role.User && (
+           <header className="bg-white shadow-sm sticky top-0 z-10">
+                <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-3 flex justify-between items-center">
+                    <p className="text-xl font-bold text-indigo-600">TOAIGO <span className="font-light text-gray-500 text-lg">{currentUser.role}</span></p>
+                    <div className="flex items-center gap-4">
+                        <span className="text-sm text-gray-600 hidden sm:inline">Logged in as <strong>{currentUser.name}</strong></span>
+                        <button onClick={handleLogout} className="flex items-center gap-2 p-2 rounded-md text-gray-500 hover:bg-gray-100 hover:text-gray-800 transition-colors">
+                            <LogoutIcon className="w-5 h-5" />
+                        </button>
+                    </div>
+                </div>
+            </header>
+      )}
+      {renderRoleView()}
+      <div className="fixed top-5 right-5 z-50 space-y-2 w-full max-w-sm">
+        {notifications.map(n => <NotificationToast key={n.id} notification={n} onClose={() => removeNotification(n.id)} />)}
+      </div>
+    </div>
+  );
+};
+
+export default App;
